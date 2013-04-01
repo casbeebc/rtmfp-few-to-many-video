@@ -1,0 +1,485 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009" 
+	xmlns:s="library://ns.adobe.com/flex/spark" 
+	xmlns:mx="library://ns.adobe.com/flex/halo" 
+	minWidth="1024" minHeight="768"
+	creationComplete="onCreationComplete(event)">
+	<fx:Script>
+		<![CDATA[
+			
+			///////////////////////////////////////////////////
+			// IMPORTS
+			///////////////////////////////////////////////////
+			
+			import com.realeyes.net.util.NetStreamClient;
+			import com.realeyes.net.util.NetStreamDataEvent;
+			
+			import mx.controls.Alert;
+			import mx.events.FlexEvent;
+			import mx.utils.ObjectUtil;
+
+			
+			
+			///////////////////////////////////////////////////
+			// DECLARATIONS
+			///////////////////////////////////////////////////
+			
+			// Stratus connect info
+			private const SERVER:String = "rtmfp://stratus.adobe.com/";
+			private const DEVKEY:String = "{Insert_Stratus_Key_Here}";			
+			
+			// Used to connect to the Stratus service
+			private var _netConnection:NetConnection;
+			
+			// Our GroupSpec
+			private var _groupSpecifier:GroupSpecifier;
+			
+			// We need an outgoing and incoming stream
+			private var _outgoingStream:NetStream;
+			private var _incomingStream:NetStream;
+			
+			// We also need a client class for the netstreams
+			private var _streamClient:NetStreamClient;			
+			
+			// We'll need a NetGroup
+			private var _netGroup:NetGroup;
+			
+			// Used to store our P2P Peer ID
+			[Bindable]
+			private var _nearID:String;
+
+			// We'll track if the NetConnection is connected
+			[Bindable]
+			private var _netConnectionConnected:Boolean;
+			
+			// Used to store our P2P GroupSpec
+			[Bindable]
+			private var _groupSpec:String;			
+			
+			// Used when the instance is publishing to 
+			// an outgoing stream.
+			[Bindable]
+			private var _outgoingStreamOn:Boolean;
+			
+			// Used when the instance is viewing and incoming stream.			
+			[Bindable]
+			private var _incomingStreamOn:Boolean;
+
+			// We want to keep track if the NetGroup is connected or not.
+			[Bindable]
+			private var _netGroupConnected:Boolean;
+			// We're going to track estimated P2P members
+			[Bindable]
+			private var _estimatedP2PMembers:Number;
+			
+			
+			///////////////////////////////////////////////////
+			// METHODS/HANDLERS
+			///////////////////////////////////////////////////
+			
+			
+			
+			// On creation complete we'll connect to the stratus service
+			protected function onCreationComplete( event:FlexEvent ):void
+			{
+				_logMsg( "Flash Player Version: " + Capabilities.version );
+				_logMsg( "Is Flash Player a Debugger? " + Capabilities.isDebugger );
+					
+				
+				//SHould only be called once for the app
+				_initNetConnection();	
+			}
+
+			// This listener is run when data is received on the net stream
+			protected function onNSDataReceived( event:NetStreamDataEvent ):void
+			{
+				// Let's output our message or data to the console.
+				_logMsg( ObjectUtil.toString( event.data ) );
+			}
+			
+			
+
+			// We'll listen for netconnection, netstream, and NetGroup status and deal with it appropriately
+			protected function onNetStatus( event:NetStatusEvent ):void
+			{
+				// Let's output to the UI console
+				_logMsg( event.info.code );
+
+				switch( event.info.code )
+				{
+					case "NetConnection.Connect.Success":
+					{
+						// We're connected...set the flag
+						_netConnectionConnected = true;
+						
+						// We've connected to stratus, let's cache our ID
+						_nearID = event.target.nearID;
+						_logMsg( "Connected - Stratus ID: " + _nearID );
+						
+						
+						
+						// Let's create a Group to use with NetStream and NetGroup
+						_createGroupSpec();
+						break;
+					}
+					case "NetConnection.Connect.Closed":
+					case "NetConnection.Connect.Failed":
+					case "NetConnection.Connect.Rejected":
+					case "NetConnection.Connect.AppShutdown":
+					case "NetConnection.Connect.InvalidApp":
+					{
+						
+						if( _netGroup )
+						{
+							clearNetGroup();
+						}
+						
+						// clear references
+						
+						_outgoingStream = null;
+						_incomingStream = null;		
+						
+						
+						// reset flags
+						_netConnectionConnected = false;
+						_outgoingStreamOn = false;
+						_incomingStreamOn = false;
+						
+						break;
+					}
+					case "NetStream.Connect.Success":
+					{
+						// Our stream connected successfully
+						// Let's attach video and audio (either local or remote)
+						if( _outgoingStreamOn )
+						{
+							_attachLocalVideoAndAudio();
+						}
+						else
+						{	
+							_attachPeerVideoAndAudio();
+						}	
+						break;		
+					}
+					case "NetStream.Connect.Rejected":
+					case "NetStream.Connect.Failed":
+					{
+						// Our stream failed to connect
+						if( _outgoingStreamOn )
+						{
+							_outgoingStreamOn = false;						
+						}
+						else
+						{
+							_incomingStreamOn = false;
+						}
+						break;
+					}	
+					case "NetStream.Publish.Start":
+					{
+						// outgoing stream is now published.
+						break;
+					}
+					case "NetStream.MulticastStream.Reset":
+					case "NetStream.Buffer.Full":
+					default:
+					{
+						break;	
+					}
+					// NetGroup Connection Events fire from NetConnection
+					case "NetGroup.Connect.Success":
+					{
+						// let's let the app know the NetGroup is connected
+						_netGroupConnected = true;
+						
+						_logMsg( "Connected - Group ID: " + _groupSpec );
+						
+						// Let's update the estimated member count
+						_estimatedP2PMembers = _netGroup.estimatedMemberCount;						
+						break;
+					}		
+					case "NetGroup.Connect.Rejected":
+					case "NetGroup.Connect.Failed":
+					{
+						// let's clear the NetGroup ref and listener
+						clearNetGroup();
+						break;
+					}																				
+				}
+			}	
+
+			// handles NetGroup NetStatus events
+			protected function onNetGroupStatus( event:NetStatusEvent ):void
+			{
+				// Let's output to the UI console
+				_logMsg( event.info.code );				
+			
+				switch(event.info.code)
+				{									
+					case "NetGroup.Posting.Notify": 
+					{
+						chat_ta.text = "=================\n" 
+							+ "Message ID: " + event.info.messageID + "\n"
+							+ "Message: " 
+							+ ObjectUtil.toString( event.info.message ) 
+							+ "\n" + chat_ta.text; 
+						break;
+					}																		
+					case "NetGroup.Neighbor.Connect":
+					{
+						// Don't show this in the app that connected
+						// We have to convert the Stratus ID to a Group ID to compare it to the Group ID of the neighbor
+						if( event.info.neighbor != _netGroup.convertPeerIDToGroupAddress( _nearID ) )
+						{
+							Alert.show( 'Neighbor ' + event.info.neighbor + ' has connected' );
+							// Let's update the estimated member count
+							_estimatedP2PMembers = _netGroup.estimatedMemberCount;
+						}	
+						break;
+					}
+					case "NetGroup.Neighbor.Disconnect":
+					{					
+						Alert.show( 'Neighbor ' + event.info.neighbor + ' has disconnected' );	
+						// Let's update the estimated member count
+						_estimatedP2PMembers = _netGroup.estimatedMemberCount;						
+						break;
+					}
+					case "NetGroup.LocalCoverage.Notify":
+					case "NetGroup.SendTo.Notify": // event.info.message, event.info.from, event.info.fromLocal
+					case "NetGroup.MulticastStream.PublishNotify": // event.info.name
+					case "NetGroup.MulticastStream.UnpublishNotify": // event.info.name
+					case "NetGroup.Replication.Fetch.SendNotify": // event.info.index
+					case "NetGroup.Replication.Fetch.Failed": // event.info.index
+					case "NetGroup.Replication.Fetch.Result": // event.info.index, event.info.object
+					case "NetGroup.Replication.Request": // event.info.index, event.info.requestID	
+					default:
+					{
+						break;
+					}
+				}									
+			}
+
+			// For outbound stream
+			protected function onStartOutgoingStream(event:MouseEvent):void
+			{			
+				// We create a stream in our net connection for P2P outgoing
+				_outgoingStream = new NetStream( _netConnection, _groupSpec );	
+				// We add a net status listener to the NetStream
+				_outgoingStream.addEventListener( NetStatusEvent.NET_STATUS, onNetStatus );
+				
+				// We set a client for callbacks 
+				_outgoingStream.client = _streamClient;
+				
+				// In this app, we're either going to be publisher or a viewer
+				_outgoingStreamOn = true;
+			}
+
+			// For inbound stream
+			protected function onStartIncomingStream(event:MouseEvent):void
+			{					
+				// Create an incoming stream with the GroupSpec
+				_incomingStream = new NetStream( _netConnection, _groupSpec );
+				
+				// For some reason NetStream events are being dispatched from NetConnection.  so this listener is pointless
+					//_incomingStream.addEventListener( NetStatusEvent.NET_STATUS, onNetStreamStatus );
+				
+				// We set a client for callbacks
+				_incomingStream.client = _streamClient;
+				
+				// In this app, we're either going to be publisher or a viewer
+				_incomingStreamOn = true;
+			}
+
+			// For NetGroup
+			protected function onJoinNetGroup(event:MouseEvent):void
+			{
+				// Creating a NetGroup instance
+				_netGroup = new NetGroup( _netConnection, _groupSpec );
+				// Adding a net status listener
+				_netGroup.addEventListener( NetStatusEvent.NET_STATUS, onNetGroupStatus );			
+				
+			}
+			
+			protected function clearNetGroup():void
+			{
+				_netGroup.close();
+				_netGroupConnected = false;
+				_netGroup.removeEventListener( NetStatusEvent.NET_STATUS, onNetGroupStatus );
+				_netGroup = null;
+			}
+
+			protected function onPostMessage(event:MouseEvent):void
+			{
+				// In FP10, we can use the netstream to send data
+				if( _netGroup && !message_ti.text )
+				{
+					// There was no message...let's test sending object.
+						//_netGroup.post( "onNetStreamReceive", {name:"Jun Heider",birthday:"10/3/74"} );
+					_netGroup.post( new ByteArray() );
+				}
+				else
+				{
+					// There was a message...let's send that.
+					_netGroup.post( message_ti.text );
+				}	
+			}
+
+			private function _initNetConnection():void
+			{
+				_netConnection = new NetConnection();
+				
+				_streamClient = new NetStreamClient();
+				
+				// let's add a listener for when the client receives data
+				_streamClient.addEventListener( NetStreamDataEvent.DATA_RECEIVED, onNSDataReceived )
+				
+				// Listen for status info
+				_netConnection.addEventListener (NetStatusEvent.NET_STATUS, onNetStatus );
+				
+				// When we connect we are connecting to stratus using our unique URI
+				_netConnection.connect( SERVER + DEVKEY );						
+			}
+
+			private function _createGroupSpec():void
+			{
+				// Let's create a GroupSpecifier
+				_groupSpecifier = new GroupSpecifier( groupName.text );
+				_groupSpecifier.multicastEnabled = true;
+				_groupSpecifier.objectReplicationEnabled = true;
+				_groupSpecifier.postingEnabled = true;
+				_groupSpecifier.routingEnabled = true;
+				// By enabling the server channel Stratus can help clients find each other.
+				_groupSpecifier.serverChannelEnabled = true;
+				
+				// Additional GroupSpecifier Options
+					
+					// When set to true the Flash Player will send membership 
+					// updates on a LAN to inform other LAN-connected group 
+					// neighbors of their participation.
+						//_groupSpecifier.ipMulticastMemberUpdatesEnabled = true;
+					
+					// When set to true it will disable the Peer-assisted Networking 
+					// dialog and P2P connections with other group members. Useful 
+					// for pure IP-multicast scenarios.
+						//_groupSpecifier.peerToPeerDisabled = true;	
+					
+				// Let's cache the groupSpec
+				_groupSpec = _groupSpecifier.groupspecWithoutAuthorizations();				
+			}
+			
+			private function _attachLocalVideoAndAudio():void
+			{				
+				// Let's get our camera and microphone
+				var camera:Camera = Camera.getCamera();
+				var mic:Microphone = Microphone.getMicrophone();				
+
+				if(mic)
+				{
+					// Let's attach the mic to the outgoing stream
+					_outgoingStream.attachAudio(mic);
+				}
+				
+				if(camera)
+				{
+					// Let's monitor the video locally					
+					videoDisplay.attachCamera(camera);
+					// Let's attach the camera to the outgoing stream
+					_outgoingStream.attachCamera(camera);
+				}
+				
+				// Open the stream and wait for clients
+				_outgoingStream.publish( "P2PVideo" );			
+			}
+			
+			private function _attachPeerVideoAndAudio():void
+			{
+				// Create the incoming video from the stream
+				var remoteVideo:Video = new Video();
+					remoteVideo.attachNetStream( _incomingStream );
+				
+				// Add the video to the display	
+				videoDisplay.addChild( remoteVideo );
+				
+				// Start playing the stream
+				_incomingStream.play("P2PVideo");			
+			}		
+			
+			
+			
+			private function _logMsg( p_msg:String):void
+			{
+				// Let's output our message or data to the console.
+				console_ta.text = "=================\n" 
+					+ p_msg + "\n"
+					+ console_ta.text;
+			}
+			
+		]]>
+	</fx:Script>
+
+	<s:layout>
+		<s:VerticalLayout horizontalAlign="center" paddingTop="10"/>
+	</s:layout>
+	
+	
+	<s:HGroup>
+		<s:VGroup>
+			<s:VGroup paddingTop="5">
+				<s:Label text="{ _netGroupConnected? 'Estimated Nodes in the P2P Group: ' + _estimatedP2PMembers : 'Not connected to P2P Group' }" textAlign="right"/>
+				<mx:HRule/>
+				<s:Label text="Group Posts"/>
+				<s:VGroup>
+					<s:TextArea width="354" height="334" id="chat_ta"/>
+					<s:HGroup>
+						<s:Label id="send_lbl"
+							text="message to post to group:"/>
+						<s:TextInput id="message_ti"/>
+						<s:Button id="postMessage"
+							label="submit"
+							click="onPostMessage(event)"
+							enabled="{ _netGroupConnected }"/>	
+					</s:HGroup>
+				</s:VGroup>
+			</s:VGroup>
+			<s:HGroup>
+		<s:Button id="toggleNetConnection"
+			label="{ _netConnectionConnected? 'connected' : 'connect' }"
+			click="_initNetConnection()"
+			enabled="{ !_netConnectionConnected }"/>				 
+		<s:Button id="toggleNetGroup"
+			label="{ _netGroupConnected? 'net group connected' : 'join net group:' }"
+			click="onJoinNetGroup(event)"
+			enabled="{ !_netGroupConnected }"/>
+		<s:TextInput id="groupName" text="com.realeyes.rtmfpdemos.RealEyes_Devnet_P2PIntro" enabled="{ !_netGroupConnected }"/>
+	</s:HGroup>
+	<s:HGroup>
+		<s:Button id="startOutgoingStream"
+			label="{ _outgoingStreamOn? 'outgoing stream on' : 'start outgoing stream' }"
+			click="onStartOutgoingStream(event)"
+			enabled="{ !_outgoingStreamOn }"
+			visible="{ !_incomingStreamOn }"/>			
+		<s:Button id="startIncomingStream"
+			label="{ _incomingStreamOn? 'incoming stream on' : 'start incoming stream' }"
+			click="onStartIncomingStream(event)"
+			enabled="{ !_incomingStreamOn }"
+			visible="{ !_outgoingStreamOn }"/>	
+	</s:HGroup>
+			
+		</s:VGroup>
+		
+		<s:VGroup paddingTop="5">
+			<s:Label text="Video Stream"/>
+			<mx:VideoDisplay id="videoDisplay" width="320" height="240"/>
+			<s:Label text="Debug Console"/>
+			<s:TextArea width="320" height="201" id="console_ta"/>
+		</s:VGroup>
+		
+			
+			
+			
+		
+	</s:HGroup>
+	
+	
+	
+</s:Application>

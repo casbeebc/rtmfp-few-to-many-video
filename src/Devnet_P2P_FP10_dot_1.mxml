@@ -1,9 +1,11 @@
-<?xml version="1.0" encoding="utf-8"?>
+<!-- minWidth="1024" minHeight="768"-->
+<!-- minWidth="320" minHeight="480" -->
 <s:Application xmlns:fx="http://ns.adobe.com/mxml/2009" 
-	xmlns:s="library://ns.adobe.com/flex/spark" 
-	xmlns:mx="library://ns.adobe.com/flex/halo" 
-	minWidth="1024" minHeight="768"
-	creationComplete="onCreationComplete(event)">
+			   xmlns:s="library://ns.adobe.com/flex/spark" 
+			   xmlns:mx="library://ns.adobe.com/flex/mx" 
+			   minWidth="640" minHeight="960"
+			   creationComplete="onCreationComplete(event)">
+
 	<fx:Script>
 		<![CDATA[
 			
@@ -25,8 +27,10 @@
 			///////////////////////////////////////////////////
 			
 			// Stratus connect info
-			private const SERVER:String = "rtmfp://stratus.adobe.com/";
-			private const DEVKEY:String = "{Insert_Stratus_Key_Here}";			
+			//private const SERVER:String = "rtmfp://stratus.adobe.com/";
+			//private const DEVKEY:String = "{Insert_Stratus_Key_Here}";
+			private const SERVER:String = "rtmfp://p2p.rtmfp.net/";
+			private const DEVKEY:String = "35d8ccaa858a5e1e446fd828-a3b83d63ec71";			
 			
 			// Used to connect to the Stratus service
 			private var _netConnection:NetConnection;

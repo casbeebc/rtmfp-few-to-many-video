@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark" 
+		 xmlns:mx="library://ns.adobe.com/flex/mx" width="400" height="300">
+	<fx:Declarations>
+		<s:Fade id="fadeIn" alphaFrom="0.0" alphaTo="1.0" />
+		<s:Fade id="fadeOut" alphaFrom="1.0" alphaTo="0.0" />
+	</fx:Declarations>
+	<fx:Style>
+		@namespace s "library://ns.adobe.com/flex/spark";
+		@namespace mx "library://ns.adobe.com/flex/mx";
+		
+		.link .midcol {
+			font-weight: bold;
+			font-size: small;
+		}
+		
+		.midcol {
+			float: left;
+			margin-right: 4px;
+			margin-left: 7px;
+			background: transparent;
+			overflow: hidden;
+		}
+		
+		.arrow.up {
+			background-image: url('assets/sprite-reddit.XJpb_z7IEhY.png');
+			background-position: -32px -616px;
+			background-repeat: no-repeat;
+		}
+		
+		.arrow.down {
+			background-image: url('assets/sprite-reddit.XJpb_z7IEhY.png');
+			background-position: 0px -616px;
+			background-repeat: no-repeat;
+		}
+		
+		.arrow {
+			margin: 2px 0px 0px 0px;
+			width: 100%;
+			height: 14px;
+			display: block;
+			cursor: pointer;
+			background-position: center center;
+			background-repeat: no-repeat;
+			width: 15px;
+			margin-left: auto;
+			margin-right: auto;
+			outline: none;
+		}
+		.link .score.likes {
+			color: #FF8B60;
+		}
+		
+		.link .score.dislikes {
+			color: #9494FF;
+		}
+		
+		.score.likes, .score.dislikes {
+			display: none;
+		}
+		.link .score {
+			text-align: center;
+			color: #c6c6c6;
+		}
+		
+		@font-face {
+			src:url("assets/arial.ttf");
+			font-family: Arial;
+		}
+		
+		.timeStyle {
+			color: #FFFFFF;
+			font-family: Arial;
+			font-size: 12;
+		}
+		
+		.playPauseStyle {
+			/* play button skins */
+			skin: Embed('assets/control_play.png');
+			downSkin: Embed('assets/control_play_blue.png');
+			
+			/* pause button skins */
+			selectedUpSkin: Embed('assets/control_pause.png');
+			selectedOverSkin: Embed('assets/control_pause.png');
+			selectedDownSkin: Embed('assets/control_pause_blue.png');
+		}
+		
+		.stopStyle {
+			skin: Embed('assets/control_stop.png');
+			downSkin: Embed('assets/control_stop_blue.png');
+		}
+		
+		.controllerStyle {
+			bottom: 5;
+			left: 5;
+			right: 5;
+			paddingBottom: 5;
+			paddingLeft: 5;
+			paddingRight: 5;
+			paddingTop: 5;
+			alpha: 0;
+			background-color: #000000;
+			background-alpha: 0.5;
+		}
+		
+	</fx:Style>
+	<fx:Script>
+		<![CDATA[
+			public function attachCamera(camera:Camera):void {
+				if(videoDisplay) {
+					videoDisplay.attachCamera(camera);
+				}
+			}
+			
+			public function showControls():void {
+				fadeIn.play([controls]);
+			}
+			
+			public function hideControls():void {
+				fadeOut.play([controls]);
+			}
+			
+			public function playButton_click(event:MouseEvent):void {
+				if (videoDisplay.playing) {
+					videoDisplay.pause();
+				} else {
+					videoDisplay.play();
+				}
+			}
+			
+			public function stopButton_click(event:MouseEvent):void {
+				videoDisplay.stop();
+			}
+		]]>
+	</fx:Script>
+	<mx:HBox>
+		
+		<!--
+		<mx:VBox>
+			<mx:Box styleName="arrow up">
+			</mx:Box>
+			<mx:Box styleName="arrow down">
+			</mx:Box>
+		</mx:VBox>
+		-->
+		<mx:Canvas rollOver="showControls()" rollOut="hideControls()">
+			<mx:VideoDisplay id="videoDisplay" width="320" height="240"/>
+			<mx:HBox id="controls" styleName="controllerStyle" alpha="0.0">
+				<mx:Button id="playPauseButton" styleName="playPauseStyle" toggle="true" selected="{videoDisplay.playing}" click="playButton_click(event)" />
+				<mx:Button id="stopButton" styleName="stopStyle" click="stopButton_click(event)" />
+				<mx:Spacer width="100%" />
+				<mx:Label id="time" styleName="timeStyle" />
+			</mx:HBox>
+		</mx:Canvas>
+		
+	</mx:HBox>
+</s:Group>

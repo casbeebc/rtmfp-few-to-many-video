@@ -2,10 +2,60 @@
 <!-- minWidth="320" minHeight="480" -->
 <s:Application xmlns:fx="http://ns.adobe.com/mxml/2009" 
 			   xmlns:s="library://ns.adobe.com/flex/spark" 
-			   xmlns:mx="library://ns.adobe.com/flex/mx" 
+			   xmlns:mx="library://ns.adobe.com/flex/mx"
+			   xmlns:fangg="*"
 			   minWidth="640" minHeight="960"
+			   initialize="initApp()"
 			   creationComplete="onCreationComplete(event)">
-
+	<fx:Declarations>
+		<!--
+		<s:Fade id="fadeIn" alphaFrom="0.0" alphaTo="1.0" />
+		<s:Fade id="fadeOut" alphaFrom="1.0" alphaTo="0.0" />
+		-->
+	</fx:Declarations>
+	
+	<fx:Style>
+		@font-face {
+		src:url("assets/arial.ttf");
+		font-family: Arial;
+		}
+		
+		.timeStyle {
+		color: #FFFFFF;
+		font-family: Arial;
+		font-size: 12;
+		}
+		
+		.playPauseStyle {
+		/* play button skins */
+		skin: Embed('assets/control_play.png');
+		downSkin: Embed('assets/control_play_blue.png');
+		
+		/* pause button skins */
+		selectedUpSkin: Embed('assets/control_pause.png');
+		selectedOverSkin: Embed('assets/control_pause.png');
+		selectedDownSkin: Embed('assets/control_pause_blue.png');
+		}
+		
+		.stopStyle {
+		skin: Embed('assets/control_stop.png');
+		downSkin: Embed('assets/control_stop_blue.png');
+		}
+		
+		.controllerStyle {
+		bottom: 5;
+		left: 5;
+		right: 5;
+		paddingBottom: 5;
+		paddingLeft: 5;
+		paddingRight: 5;
+		paddingTop: 5;
+		alpha: 0;
+		background-color: #000000;
+		background-alpha: 0.5;
+		}
+	</fx:Style>
+	
 	<fx:Script>
 		<![CDATA[
 			
@@ -18,6 +68,7 @@
 			
 			import mx.controls.Alert;
 			import mx.events.FlexEvent;
+			import mx.events.VideoEvent;
 			import mx.utils.ObjectUtil;
 
 			
@@ -27,10 +78,9 @@
 			///////////////////////////////////////////////////
 			
 			// Stratus connect info
-			//private const SERVER:String = "rtmfp://stratus.adobe.com/";
-			//private const DEVKEY:String = "{Insert_Stratus_Key_Here}";
-			private const SERVER:String = "rtmfp://p2p.rtmfp.net/";
-			private const DEVKEY:String = "35d8ccaa858a5e1e446fd828-a3b83d63ec71";			
+			private const SERVER:String = "rtmfp://stratus.adobe.com/";
+			private const DEVKEY:String = "{Insert_Stratus_Key_Here}";
+			private var groupName:String = "testgroup";
 			
 			// Used to connect to the Stratus service
 			private var _netConnection:NetConnection;
@@ -47,6 +97,9 @@
 			
 			// We'll need a NetGroup
 			private var _netGroup:NetGroup;
+			
+			// Our generated random ID
+			private var _userID:String;
 			
 			// Used to store our P2P Peer ID
 			[Bindable]
@@ -124,6 +177,7 @@
 						
 						// Let's create a Group to use with NetStream and NetGroup
 						_createGroupSpec();
+						onJoinNetGroup();
 						break;
 					}
 					case "NetConnection.Connect.Closed":
@@ -222,12 +276,7 @@
 				{									
 					case "NetGroup.Posting.Notify": 
 					{
-						chat_ta.text = "=================\n" 
-							+ "Message ID: " + event.info.messageID + "\n"
-							+ "Message: " 
-							+ ObjectUtil.toString( event.info.message ) 
-							+ "\n" + chat_ta.text; 
-						break;
+						 // posting a message
 					}																		
 					case "NetGroup.Neighbor.Connect":
 					{
@@ -235,7 +284,7 @@
 						// We have to convert the Stratus ID to a Group ID to compare it to the Group ID of the neighbor
 						if( event.info.neighbor != _netGroup.convertPeerIDToGroupAddress( _nearID ) )
 						{
-							Alert.show( 'Neighbor ' + event.info.neighbor + ' has connected' );
+							//Alert.show( 'Neighbor ' + event.info.neighbor + ' has connected' );
 							// Let's update the estimated member count
 							_estimatedP2PMembers = _netGroup.estimatedMemberCount;
 						}	
@@ -243,7 +292,7 @@
 					}
 					case "NetGroup.Neighbor.Disconnect":
 					{					
-						Alert.show( 'Neighbor ' + event.info.neighbor + ' has disconnected' );	
+						//Alert.show( 'Neighbor ' + event.info.neighbor + ' has disconnected' );	
 						// Let's update the estimated member count
 						_estimatedP2PMembers = _netGroup.estimatedMemberCount;						
 						break;
@@ -251,7 +300,13 @@
 					case "NetGroup.LocalCoverage.Notify":
 					case "NetGroup.SendTo.Notify": // event.info.message, event.info.from, event.info.fromLocal
 					case "NetGroup.MulticastStream.PublishNotify": // event.info.name
+					{
+						Alert.show('MulticastStream.PublishNotify');
+					}
 					case "NetGroup.MulticastStream.UnpublishNotify": // event.info.name
+					{
+						Alert.show('MulticastStream.UnpublishNotify');
+					}
 					case "NetGroup.Replication.Fetch.SendNotify": // event.info.index
 					case "NetGroup.Replication.Fetch.Failed": // event.info.index
 					case "NetGroup.Replication.Fetch.Result": // event.info.index, event.info.object
@@ -295,7 +350,7 @@
 			}
 
 			// For NetGroup
-			protected function onJoinNetGroup(event:MouseEvent):void
+			protected function onJoinNetGroup():void
 			{
 				// Creating a NetGroup instance
 				_netGroup = new NetGroup( _netConnection, _groupSpec );
@@ -312,21 +367,6 @@
 				_netGroup = null;
 			}
 
-			protected function onPostMessage(event:MouseEvent):void
-			{
-				// In FP10, we can use the netstream to send data
-				if( _netGroup && !message_ti.text )
-				{
-					// There was no message...let's test sending object.
-						//_netGroup.post( "onNetStreamReceive", {name:"Jun Heider",birthday:"10/3/74"} );
-					_netGroup.post( new ByteArray() );
-				}
-				else
-				{
-					// There was a message...let's send that.
-					_netGroup.post( message_ti.text );
-				}	
-			}
 
 			private function _initNetConnection():void
 			{
@@ -341,13 +381,29 @@
 				_netConnection.addEventListener (NetStatusEvent.NET_STATUS, onNetStatus );
 				
 				// When we connect we are connecting to stratus using our unique URI
-				_netConnection.connect( SERVER + DEVKEY );						
+				_netConnection.connect( SERVER + DEVKEY );
+				
+			
+				
+			}
+			
+			public function initApp():void {
+				
+			}
+			
+			public function initVideoList():void {
+				
+				/*
+				var videoControl:com.realeyes.net.util.VideoControl = new com.realeyes.net.util.VideoControl("2352343");
+				videoList.addChild(videoControl);
+				*/
+				
 			}
 
 			private function _createGroupSpec():void
 			{
 				// Let's create a GroupSpecifier
-				_groupSpecifier = new GroupSpecifier( groupName.text );
+				_groupSpecifier = new GroupSpecifier( groupName );
 				_groupSpecifier.multicastEnabled = true;
 				_groupSpecifier.objectReplicationEnabled = true;
 				_groupSpecifier.postingEnabled = true;
@@ -365,7 +421,7 @@
 					// When set to true it will disable the Peer-assisted Networking 
 					// dialog and P2P connections with other group members. Useful 
 					// for pure IP-multicast scenarios.
-						//_groupSpecifier.peerToPeerDisabled = true;	
+						_groupSpecifier.peerToPeerDisabled = true;	
 					
 				// Let's cache the groupSpec
 				_groupSpec = _groupSpecifier.groupspecWithoutAuthorizations();				
@@ -385,8 +441,19 @@
 				
 				if(camera)
 				{
+					var videoControl:VideoControl = new VideoControl();
+					videoList.addChild(videoControl);
+					videoControl.attachCamera(camera);
+					
+					/*
+					var videoControl = new com.realeyes.net.util.VideoControl("2352343");
+					videoList.addChild(videoControl);
+					videoControl.attachCamera(camera);
+					*/
+					
 					// Let's monitor the video locally					
-					videoDisplay.attachCamera(camera);
+					//videoDisplay.attachCamera(camera);
+					
 					// Let's attach the camera to the outgoing stream
 					_outgoingStream.attachCamera(camera);
 				}
@@ -400,9 +467,19 @@
 				// Create the incoming video from the stream
 				var remoteVideo:Video = new Video();
 					remoteVideo.attachNetStream( _incomingStream );
-				
+					
+					var videoControl:VideoControl = new VideoControl();
+					videoList.addChild(videoControl);
+					videoControl.addChild(remoteVideo);
+					
+					/*
+					var videoControl = new com.realeyes.net.util.VideoControl("2352343");
+					videoList.addChild(videoControl);
+					videoControl.addChild(remoteVideo);
+					*/
+					
 				// Add the video to the display	
-				videoDisplay.addChild( remoteVideo );
+				//videoDisplay.addChild( remoteVideo );
 				
 				// Start playing the stream
 				_incomingStream.play("P2PVideo");			
@@ -418,6 +495,15 @@
 					+ console_ta.text;
 			}
 			
+			/////////////////////////////////
+			// Video Controls
+			/////////////////////////////////
+			private function createVideoControl():void {
+				
+				
+				
+			}
+			
 		]]>
 	</fx:Script>
 
@@ -431,51 +517,49 @@
 			<s:VGroup paddingTop="5">
 				<s:Label text="{ _netGroupConnected? 'Estimated Nodes in the P2P Group: ' + _estimatedP2PMembers : 'Not connected to P2P Group' }" textAlign="right"/>
 				<mx:HRule/>
-				<s:Label text="Group Posts"/>
-				<s:VGroup>
-					<s:TextArea width="354" height="334" id="chat_ta"/>
-					<s:HGroup>
-						<s:Label id="send_lbl"
-							text="message to post to group:"/>
-						<s:TextInput id="message_ti"/>
-						<s:Button id="postMessage"
-							label="submit"
-							click="onPostMessage(event)"
-							enabled="{ _netGroupConnected }"/>	
-					</s:HGroup>
-				</s:VGroup>
 			</s:VGroup>
 			<s:HGroup>
-		<s:Button id="toggleNetConnection"
-			label="{ _netConnectionConnected? 'connected' : 'connect' }"
-			click="_initNetConnection()"
-			enabled="{ !_netConnectionConnected }"/>				 
-		<s:Button id="toggleNetGroup"
-			label="{ _netGroupConnected? 'net group connected' : 'join net group:' }"
-			click="onJoinNetGroup(event)"
-			enabled="{ !_netGroupConnected }"/>
-		<s:TextInput id="groupName" text="com.realeyes.rtmfpdemos.RealEyes_Devnet_P2PIntro" enabled="{ !_netGroupConnected }"/>
-	</s:HGroup>
-	<s:HGroup>
-		<s:Button id="startOutgoingStream"
-			label="{ _outgoingStreamOn? 'outgoing stream on' : 'start outgoing stream' }"
-			click="onStartOutgoingStream(event)"
-			enabled="{ !_outgoingStreamOn }"
-			visible="{ !_incomingStreamOn }"/>			
-		<s:Button id="startIncomingStream"
-			label="{ _incomingStreamOn? 'incoming stream on' : 'start incoming stream' }"
-			click="onStartIncomingStream(event)"
-			enabled="{ !_incomingStreamOn }"
-			visible="{ !_outgoingStreamOn }"/>	
-	</s:HGroup>
-			
+				<s:Button id="startOutgoingStream"
+					label="{ _outgoingStreamOn? 'outgoing stream on' : 'start outgoing stream' }"
+					click="onStartOutgoingStream(event)"
+					enabled="{ !_outgoingStreamOn }"
+					visible="{ !_incomingStreamOn }"/>			
+				<s:Button id="startIncomingStream"
+					label="{ _incomingStreamOn? 'incoming stream on' : 'start incoming stream' }"
+					click="onStartIncomingStream(event)"
+					enabled="{ !_incomingStreamOn }"
+					visible="{ !_outgoingStreamOn }"/>	
+			</s:HGroup>
+				
 		</s:VGroup>
+		
 		
 		<s:VGroup paddingTop="5">
 			<s:Label text="Video Stream"/>
+			
+			<mx:VBox id="videoList" initialize="initVideoList();">
+				
+			</mx:VBox>
+			
+			<!--
+			<mx:Canvas rollOver="showControls()" rollOut="hideControls()">
 			<mx:VideoDisplay id="videoDisplay" width="320" height="240"/>
+			<mx:HBox id="controls" styleName="controllerStyle" alpha="0.0">
+			<mx:Button id="playPauseButton" styleName="playPauseStyle" toggle="true" selected="{videoDisplay.playing}" click="playPauseButton_click(event)" />
+			<mx:Button id="stopButton" styleName="stopStyle" click="stopButton_click(event)" />
+			<mx:Spacer width="100%" />
+			<mx:Label id="time" styleName="timeStyle" />
+			</mx:HBox>
+			</mx:Canvas>	
+			-->
+			
+			<!--
+			<mx:VideoDisplay id="videoDisplay" width="320" height="240"/>
+			-->
+			
 			<s:Label text="Debug Console"/>
 			<s:TextArea width="320" height="201" id="console_ta"/>
+			
 		</s:VGroup>
 		
 			
